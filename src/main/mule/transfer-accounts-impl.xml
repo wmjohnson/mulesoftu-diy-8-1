@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:validation="http://www.mulesoft.org/schema/mule/validation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
+	<http:request-config name="HTTP_Request--Accounts" doc:name="HTTP Request configuration" doc:id="b2410402-0d28-4106-b5f4-4fcd89aee027" basePath="/api" >
+		<http:request-connection host="apdev-accounts-ws.cloudhub.io" />
+	</http:request-config>
+	<wsc:config name="Web_Service_Consumer--Transactions" doc:name="Web Service Consumer Config" doc:id="b6e4c9c7-b55a-4615-890c-a3595fd13134" >
+		<wsc:connection wsdlLocation="http://apdev-accounts-ws.cloudhub.io/api/transactions?wsdl" service="TransactionServiceService" port="TransactionServicePort" address="http://apdev-accounts-ws.cloudhub.io/api/transactions" />
+	</wsc:config>
+	<flow name="get:transferAccounts" doc:id="55efa059-3da3-4f6d-bfbc-8a21bae0ff3f" >
+		<logger level="INFO" doc:name="Logger" doc:id="736267ae-6c4d-4b6f-97cc-14817cd958cf" message="flow impl" />
+		<validation:is-not-blank-string doc:name="Requester-ID header" doc:id="95fa564b-d974-4a40-aeff-68f5a0d11a93" value="#[attributes.headers.'requester-id']" message="Requester-ID cannot be blank"/>
+		<http:request method="GET" doc:name="GET Accounts API" doc:id="b8fac17a-20d0-4774-acb2-896fb357a480" config-ref="HTTP_Request--Accounts" path="/accounts">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Requester-ID" : "123"
+}]]]></http:headers>
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"type" : "personal"
+}]]]></http:query-params>
+			
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="fbb6bd0a-1639-4969-92d5-ddfba735338a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="transactionsSoapBody" ><![CDATA[%dw 2.0
+output application/xml
+ns ns0 http://training.mulesoft.com/
+---
+ns0#GetTransactionsforCustomers: {
+	( payload map (object, index) -> {
+	
+	  		customerID: object.id	
+	  
+		}
+	)
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<wsc:consume operation="GetTransactionsforCustomers" doc:name="Consume" doc:id="280b7e81-2641-4a1a-97a0-cc7642c73ee8" config-ref="Web_Service_Consumer--Transactions" target="transactionData">
+			<wsc:message >
+				<wsc:body ><![CDATA[#[vars.transactionsSoapBody]]]></wsc:body>
+			</wsc:message>
+		</wsc:consume>
+		<choice doc:name="Choice" doc:id="07a9cd46-c6da-41b9-b9e4-806be43fe2c0" >
+			<when expression="1==2">
+				<logger level="INFO" doc:name="Logger" doc:id="9e3d5ba0-28e1-4616-8feb-ff341fddd6d9" message='#["current payload (accounts?) = \n" ++ payload ++ " \n transactionsSOAPReqBody = \n" ++ vars.transactionsSoapBody]' />
+				<!--   <logger level="INFO" doc:name="Logger" doc:id="9191a9a7-6626-42f6-b1cd-788ac2f77c88" message='#["accounts = \n" ++ payload ++ " \n transactions = \n" ++ vars.transactionData]' /> -->
+			</when>
+		</choice>
+	</flow>
+</mule>
